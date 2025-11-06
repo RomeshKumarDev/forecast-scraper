@@ -7,13 +7,15 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # RAG imports
 from rag import run_rag_extraction, delete_vector_db
+from dotenv import load_dotenv
 
+# Load variables from .env file
+load_dotenv()
 # -----------------------
 #  Config / Keys
 # -----------------------
 DEFAULT_GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 DEFAULT_GROQ_MODEL = "moonshotai/kimi-k2-instruct-0905"
-PERSIST_DIR = "./chroma_store"  # optional if you ever persist
 
 # -----------------------
 #  Streamlit UI
@@ -55,7 +57,7 @@ with col1:
                         return splitter.split_text(text)
 
                     globals()["chunk_text"] = chunk_text_local
-
+                    print("gobal",globals())
                     parsed, raw_output = run_rag_extraction(
                         url=url,
                         groq_api_key=groq_api_key,
@@ -65,6 +67,26 @@ with col1:
                     )
 
                     if parsed is not None:
+                        # --- Debug: Inspect the global Chroma vector DB ---
+                        from rag import get_global_vdb
+                        GLOBAL_VDB = get_global_vdb()
+
+                        if GLOBAL_VDB:
+                            st.write("### 🧠 Global Vector DB Details")
+                            try:
+                                count = GLOBAL_VDB._collection.count()
+                                st.write(f"Number of vectors: **{count}**")
+
+                                # Fetch a few stored documents for inspection
+                                items = GLOBAL_VDB._collection.get(limit=3)
+                                st.write("**Sample documents in memory:**")
+                                st.json(items)
+
+                            except Exception as e:
+                                st.error(f"Error reading vector DB: {e}")
+                        else:
+                            st.info("No global vector DB currently loaded in memory.")
+
                         st.success("✅ Parsed JSON forecast (RAG)")
                         st.json(parsed)
                         st.write("### Raw LLM output (for debugging):")
@@ -80,12 +102,15 @@ with col1:
         # If you persist vectors, clean that directory; otherwise, clear memory
         with st.spinner("Deleting vector database..."):
             try:
-                delete_vector_db(persist_directory=PERSIST_DIR)
+                delete_vector_db()
+                st.session_state.clear()
+                st.rerun()
                 st.success("🧹 Vector database deleted successfully.")
             except Exception as e:
                 st.error(f"Failed to delete vector DB: {e}")
 
 with col2:
+   
     st.markdown("### Quick tips")
     st.markdown("""
 - Use **Selenium** for JS-heavy pages (toggle the checkbox). Make sure chromedriver is installed.

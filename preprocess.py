@@ -1,5 +1,5 @@
 # -----------------------
-#  Helpers: clean & chunk
+#  Helpers: clean & chunk (preprocess.py)
 # -----------------------
 
 from bs4 import BeautifulSoup
