@@ -9,9 +9,9 @@ langchain-core==0.1.53
 langchain-groq==0.1.5
 langchain-huggingface==0.0.3
 langchain-text-splitters==0.0.2
-numpy==1.26.4
+
 openai==2.3.0
-pandas==2.3.3
+
 pydantic==2.12.3
 pydantic-settings==2.11.0
 pydantic_core==2.41.4

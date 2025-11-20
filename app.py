@@ -1,6 +1,8 @@
 # app.py
 import streamlit as st
 import os
+from preprocess import json_to_dataframe, stack_dataframes
+import pandas as pd
 
 # LangChain + Groq + Vector DB imports
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -21,7 +23,7 @@ DEFAULT_GROQ_MODEL = "moonshotai/kimi-k2-instruct-0905"
 #  Streamlit UI
 # -----------------------
 st.set_page_config(page_title="RAG Weather Extractor", layout="wide")
-st.title("🌦️ RAG Weather Extractor — Scrape, Clean, Embed, Retrieve, Parse")
+st.title(" RAG Weather Extractor")
 
 col1, col2 = st.columns([2, 1])
 
@@ -37,10 +39,12 @@ with col1:
     btn_col1, btn_col2 = st.columns([1, 1])
 
     with btn_col1:
-        extract_btn = st.button("Extract forecast (RAG)", use_container_width=True)
+        extract_btn = st.button("Scrape Weather Data", use_container_width=True)
     with btn_col2:
-        delete_db_btn = st.button("🗑️ Delete Vector DB", use_container_width=True)
+        delete_db_btn = st.button("Delete Vector DB", use_container_width=True)
 
+    st.write("Session State", st.session_state.get("weather_df"))
+    # Extraction logic
     if extract_btn:
         if not groq_api_key:
             st.error("Groq API key required — enter it above.")
@@ -56,8 +60,9 @@ with col1:
                         )
                         return splitter.split_text(text)
 
+
                     globals()["chunk_text"] = chunk_text_local
-                    print("gobal",globals())
+                    print("gobal", globals())
                     parsed, raw_output = run_rag_extraction(
                         url=url,
                         groq_api_key=groq_api_key,
@@ -67,30 +72,44 @@ with col1:
                     )
 
                     if parsed is not None:
-                        # --- Debug: Inspect the global Chroma vector DB ---
-                        from rag import get_global_vdb
-                        GLOBAL_VDB = get_global_vdb()
+                        # # --- Debug: Inspect the global Chroma vector DB ---
+                        # from rag import get_global_vdb
+                        # GLOBAL_VDB = get_global_vdb()
 
-                        if GLOBAL_VDB:
-                            st.write("### 🧠 Global Vector DB Details")
-                            try:
-                                count = GLOBAL_VDB._collection.count()
-                                st.write(f"Number of vectors: **{count}**")
+                        # if GLOBAL_VDB:
+                        #     st.write("### 🧠 Global Vector DB Details")
+                        #     try:
+                        #         count = GLOBAL_VDB._collection.count()
+                        #         st.write(f"Number of vectors: **{count}**")
 
-                                # Fetch a few stored documents for inspection
-                                items = GLOBAL_VDB._collection.get(limit=3)
-                                st.write("**Sample documents in memory:**")
-                                st.json(items)
+                        #         # Fetch a few stored documents for inspection
+                        #         items = GLOBAL_VDB._collection.get(limit=3)
+                        #         st.write("**Sample documents in memory:**")
+                        #         st.json(items)
 
-                            except Exception as e:
-                                st.error(f"Error reading vector DB: {e}")
-                        else:
-                            st.info("No global vector DB currently loaded in memory.")
+                        #     except Exception as e:
+                        #         st.error(f"Error reading vector DB: {e}")
+                        # else:
+                        #     st.info("No global vector DB currently loaded in memory.")
 
-                        st.success("✅ Parsed JSON forecast (RAG)")
+                        st.success("Parsed json forecast data successfully")
                         st.json(parsed)
-                        st.write("### Raw LLM output (for debugging):")
-                        st.code(raw_output[:10000])
+                        weather_df = json_to_dataframe(parsed)
+                        st.session_state["weather_df"] = weather_df
+                        st.markdown("## Forecast DataFrame")
+                        st.dataframe(weather_df)
+
+                        # File UPload Code    
+
+                        # Read the file
+                        st.session_state["user_df"] = pd.read_csv("data.csv")
+
+                        
+
+
+
+
+
                     else:
                         st.warning("LLM did not produce clean JSON. See raw output below.")
                         st.write("### Raw LLM output:")
@@ -104,23 +123,41 @@ with col1:
             try:
                 delete_vector_db()
                 st.session_state.clear()
+
+                #  CHANGE: CLEAR session after saving
+                if st.session_state.get("weather_df"):
+                    del st.session_state["weather_df"]
+                elif st.session_state.get("user_df"):
+                    del st.session_state["user_df"]
+
+                st.info("Session cleared — scraped data removed from memory.")
                 st.rerun()
-                st.success("🧹 Vector database deleted successfully.")
             except Exception as e:
                 st.error(f"Failed to delete vector DB: {e}")
+    # Show Add Button ONLY if df already has data
+    df = st.session_state.get("weather_df")
+
+    if df is not None and not df.empty:
+        if st.button("Add Scraped Data to Existing DataFrame"):
+            # safe to use df
+    
+            # 🔥 CHANGE: Use weather_df from session_state, NOT from local variable
+            weather_df = st.session_state.get("weather_df")
+            user_df = st.session_state.get("user_df")
+    
+            if weather_df is None:
+                st.error("No scraped data found in session. Please scrape again.")
+            else:
+                # Merge dataframes
+                df = stack_dataframes(weather_df, user_df)
+    
+                # Save back to CSV
+                df.to_csv("data.csv", index=False)
+    
+                st.success("Data added successfully to CSV!")
+                st.write("## Updated Combined DataFrame")
+                st.dataframe(df)
 
 with col2:
-   
-    st.markdown("### Quick tips")
-    st.markdown("""
-- Use **Selenium** for JS-heavy pages (toggle the checkbox). Make sure chromedriver is installed.
-- If results are noisy, increase `max_chunks` or chunk size.
-- You can swap HuggingFace embedding to a cloud embedding provider if you prefer.
-- The pipeline stores vectors in-memory (Chroma) and DOES NOT persist to disk by default.
-""")
     st.markdown("### Maintenance")
-    st.info("Use the **🗑️ Delete Vector DB** button if you want to reset the embeddings cache.")
-    st.markdown("### Dependencies (pip)")
-    st.code("""
-pip install streamlit bs4 requests selenium selenium-stealth chromadb langchain langchain_groq pydantic huggingface-hub sentence-transformers
-    """)
+    st.info("Use the **Delete Vector DB** button if you want to reset the embeddings cache.")

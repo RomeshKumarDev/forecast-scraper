@@ -7,6 +7,24 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import re
 from typing import List
 from bs4 import BeautifulSoup
+import pandas as pd
+import json
+
+def json_to_dataframe(json_data):
+    """
+    Takes JSON data (string or dict/list) and returns a pandas DataFrame.
+    """
+
+    # If it's a JSON string → convert to Python object
+    if isinstance(json_data, str):
+        json_data = json.loads(json_data)
+
+    # If single dict → convert to list
+    if isinstance(json_data, dict):
+        json_data = [json_data]
+
+    # Finally return DataFrame
+    return pd.DataFrame(json_data)
 
 def clean_html(raw_html: str) -> str:
     soup = BeautifulSoup(raw_html, "html.parser")
@@ -28,3 +46,10 @@ def chunk_text(text: str, chunk_size=1000, chunk_overlap=200) -> List[str]:
         separators=["\n\n", "\n", " ", ""]
     )
     return splitter.split_text(text)
+def stack_dataframes(user_df: pd.DataFrame, weather_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Stacks df2 below df1 and returns a combined dataframe.
+    
+    Both dataframes should have the same columns.
+    """
+    return pd.concat([weather_df,user_df ], ignore_index=True)
